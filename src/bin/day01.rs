@@ -8,6 +8,7 @@ fn main() {
     let rotations = BufReader::new(File::open("data/day01/input.txt").unwrap())
         .lines()
         .map(|line| parse_rotation(&line.unwrap()).unwrap());
+
     let passwords = process(rotations).fold([0, 0], |passwords, (position, clicks)| {
         [
             passwords[0] + if position == 0 { 1 } else { 0 },
@@ -29,26 +30,46 @@ fn parse_rotation(line: &str) -> Result<isize, nom::Err<nom::error::Error<&str>>
     all_consuming(rotation).parse(line).map(|(_, x)| x)
 }
 
-// Used to iterate over the positions and clicks from initial position 50 using the input rotations
-fn process(rotations: impl IntoIterator<Item = isize>) -> impl Iterator<Item = (isize, isize)> {
-    rotations.into_iter().scan(50, |position_prev, rotation| {
-        let clicks = count_clicks(*position_prev, rotation);
-        let position = (*position_prev + rotation).rem_euclid(N);
-        *position_prev = position;
-        Some((position, clicks))
-    })
+pub struct Dial {
+    position: isize,
 }
 
-fn count_clicks(position: isize, rotation: isize) -> isize {
-    if rotation.is_negative() {
-        // translate to an equivalent positive rotation
-        ((-position).rem_euclid(N) - rotation) / N
-    } else {
-        (position + rotation) / N
+impl Dial {
+    const SIZE: isize = 100;
+
+    pub fn new(position: isize) -> Self {
+        Dial {
+            position: position.rem_euclid(Self::SIZE),
+        }
+    }
+
+    pub fn read(&self) -> isize {
+        self.position
+    }
+
+    pub fn spin(&mut self, rotation: isize) -> isize {
+        let clicks = Self::count_zero_clicks(self.position, rotation);
+        self.position = (self.position + rotation).rem_euclid(Self::SIZE);
+        clicks
+    }
+
+    fn count_zero_clicks(position: isize, rotation: isize) -> isize {
+        if rotation.is_negative() {
+            // translate to an equivalent positive rotation
+            ((-position).rem_euclid(Self::SIZE) - rotation) / Self::SIZE
+        } else {
+            (position + rotation) / Self::SIZE
+        }
     }
 }
 
-const N: isize = 100;
+// Used to iterate over the positions and clicks from initial position 50 using the input rotations
+fn process(rotations: impl IntoIterator<Item = isize>) -> impl Iterator<Item = (isize, isize)> {
+    rotations.into_iter().scan(Dial::new(50), |dial, rotation| {
+        let clicks = dial.spin(rotation);
+        Some((dial.read(), clicks))
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -98,7 +119,7 @@ L82";
 
     #[test]
     fn test_clicks_with_cycles() {
-        assert_eq!(count_clicks(0, 300), 3);
-        assert_eq!(count_clicks(10, -110), 2);
+        assert_eq!(Dial::new(0).spin(300), 3);
+        assert_eq!(Dial::new(10).spin(-110), 2);
     }
 }
