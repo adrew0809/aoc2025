@@ -8,3 +8,4 @@ name = "day01"
 path = "src/bin/day01.rs"
 
 [dependencies]
+nom = "8"
