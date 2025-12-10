@@ -3,9 +3,13 @@ name = "aoc2025"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+nom = "8"
+
 [[bin]]
 name = "day01"
 path = "src/bin/day01.rs"
 
-[dependencies]
-nom = "8"
+[[bin]]
+name = "day02"
+path = "src/bin/day02.rs"
