@@ -5,16 +5,18 @@ fn main() {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
 
-    let invalid_sum = BufReader::new(File::open("data/day02/input.txt").unwrap())
+    let ranges: Vec<_> = BufReader::new(File::open("data/day02/input.txt").unwrap())
         .split(b',')
         .map(|u| std::str::from_utf8(&u.unwrap()).unwrap().to_owned())
         .map(|input| parse_range(&input).unwrap())
-        .flat_map(|[a, b]| {
-            let a = next_invalid_half(a);
-            let b = prev_invalid_half(b);
-            (a..=b).map(from_half)
-        })
+        .collect();
+    let invalid_sum = ranges
+        .clone()
+        .into_iter()
+        .flat_map(find_repeated_twice)
         .sum::<u64>();
+    println!("sum of invalid ids: {}", invalid_sum);
+    let invalid_sum = ranges.into_iter().flat_map(find_repeated_any).sum::<u64>();
     println!("sum of invalid ids: {}", invalid_sum);
 }
 
@@ -38,57 +40,29 @@ fn parse_range(input: &str) -> Result<[u64; 2], nom::Err<nom::error::Error<&str>
     .map(|(_, x)| x)
 }
 
-fn split(d: u64) -> [u64; 2] {
-    let n = d.ilog10() + 1;
-    let m = 10_u64.pow((n + 1) / 2);
-    [d / m, d % m]
+fn repeats_every(sequence: &[u8], n: usize) -> bool {
+    let mut iter = sequence.chunks(n);
+    iter.next().map_or(false, |head| iter.all(|x| head == x))
 }
 
-fn even_digits_floor(d: u64) -> u64 {
-    let n = num_digits(d);
-    if n % 2 == 0 {
-        d
-    } else {
-        10u64.pow(n - 1) - 1
-    }
+fn find_repeated_twice([a, b]: [u64; 2]) -> Vec<u64> {
+    (a..=b)
+        .filter(|x| {
+            let x = Vec::<u8>::from(x.to_string());
+            let n = x.len();
+            n > 1 && repeats_every(&x, (n + 1) / 2)
+        })
+        .collect()
 }
 
-fn even_digits_ceil(d: u64) -> u64 {
-    let n = num_digits(d);
-    if n % 2 == 0 {
-        d
-    } else {
-        10u64.pow(n)
-    }
-}
-
-fn num_digits(d: u64) -> u32 {
-    d.ilog10() + 1
-}
-
-fn next_invalid_half(d: u64) -> u64 {
-    let d = even_digits_ceil(d);
-    let [a, b] = split(d);
-    if a < b {
-        a + 1
-    } else {
-        a
-    }
-}
-
-fn prev_invalid_half(d: u64) -> u64 {
-    let d = even_digits_floor(d);
-    let [a, b] = split(d);
-    if a <= b {
-        a
-    } else {
-        a - 1
-    }
-}
-
-fn from_half(d: u64) -> u64 {
-    let n = num_digits(d);
-    d * 10u64.pow(n) + d
+fn find_repeated_any([a, b]: [u64; 2]) -> Vec<u64> {
+    (a..=b)
+        .filter(|x| {
+            let x = Vec::<u8>::from(x.to_string());
+            let n = x.len();
+            (1..=n / 2).any(|i| repeats_every(&x, i))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -136,90 +110,51 @@ mod test {
     }
 
     #[test]
-    fn test_split() {
-        assert_eq!(split(123451), [123, 451]);
-        assert_eq!(split(10012345), [1001, 2345]);
-        assert_eq!(split(10), [1, 0]);
-        assert_eq!(split(310), [3, 10]);
-        assert_eq!(split(54321), [54, 321]);
+    fn test_repeates_every() {
+        assert!(repeats_every(&[1, 2, 3, 1, 2, 3], 3));
+        assert!(!repeats_every(&[1, 2, 3, 1, 2, 3, 1], 3));
+        assert!(repeats_every(&[1, 4, 4, 1, 4, 4, 1, 4, 4], 3));
     }
 
     #[test]
-    fn test_even_digits_floor_even() {
-        assert_eq!(even_digits_floor(10), 10);
-        assert_eq!(even_digits_floor(1234), 1234);
-        assert_eq!(even_digits_floor(991234), 991234);
-    }
-
-    #[test]
-    fn test_even_digits_floor_odd() {
-        assert_eq!(even_digits_floor(101), 99);
-        assert_eq!(even_digits_floor(12345), 9999);
-        assert_eq!(even_digits_floor(1000000), 999999);
-    }
-
-    #[test]
-    fn test_even_digits_ceil_even() {
-        assert_eq!(even_digits_ceil(10), 10);
-        assert_eq!(even_digits_ceil(1234), 1234);
-        assert_eq!(even_digits_ceil(991234), 991234);
-    }
-
-    #[test]
-    fn test_even_digits_ceil_odd() {
-        assert_eq!(even_digits_ceil(101), 1000);
-        assert_eq!(even_digits_ceil(12345), 100000);
-        assert_eq!(even_digits_ceil(1000000), 10000000);
-    }
-
-    #[test]
-    fn test_next_invalid_half_even() {
-        assert_eq!(next_invalid_half(123451), 124);
-        assert_eq!(next_invalid_half(10012345), 1002);
-        assert_eq!(next_invalid_half(10), 1);
-        assert_eq!(next_invalid_half(909001), 909);
-        assert_eq!(next_invalid_half(1188511880), 11885);
-        assert_eq!(next_invalid_half(11), 1);
-    }
-
-    #[test]
-    fn test_next_invalid_half_odd() {
-        assert_eq!(next_invalid_half(1), 1);
-        assert_eq!(next_invalid_half(310), 10);
-        assert_eq!(next_invalid_half(54321), 100);
-    }
-
-    #[test]
-    fn test_prev_invalid_half_event() {
-        assert_eq!(prev_invalid_half(1310), 12);
-        assert_eq!(prev_invalid_half(1013), 10);
-        assert_eq!(prev_invalid_half(1013), 10);
-        assert_eq!(prev_invalid_half(1188511890), 11885);
-        assert_eq!(prev_invalid_half(22), 2);
-    }
-
-    #[test]
-    fn test_prev_invalid_half_odd() {
-        assert_eq!(prev_invalid_half(310), 9);
-        assert_eq!(prev_invalid_half(103), 9);
-        assert_eq!(prev_invalid_half(113), 9);
-        assert_eq!(prev_invalid_half(188511890), 9999);
-    }
-
-    #[test]
-    fn test_sample() {
-        let invalid_sums: Vec<u64> = RANGES
-            .iter()
-            .map(|[a, b]| {
-                let a = next_invalid_half(*a);
-                let b = prev_invalid_half(*b);
-                (a..=b).map(from_half).sum()
-            })
-            .collect();
+    fn test_sample_part_1() {
+        let invalid_ids: Vec<_> = RANGES.into_iter().map(find_repeated_twice).collect();
         assert_eq!(
-            invalid_sums,
-            [33, 99, 1010, 1188511885, 222222, 0, 446446, 38593859, 0, 0, 0]
+            invalid_ids,
+            [
+                vec![11, 22],
+                vec![99],
+                vec![1010],
+                vec![1188511885],
+                vec![222222],
+                vec![],
+                vec![446446],
+                vec![38593859],
+                vec![],
+                vec![],
+                vec![]
+            ]
         );
-        assert_eq!(invalid_sums.iter().sum::<u64>(), 1227775554);
+    }
+
+    #[test]
+    fn test_sample_part_2() {
+        let invalid_ids: Vec<_> = RANGES.into_iter().map(find_repeated_any).collect();
+        assert_eq!(
+            invalid_ids,
+            [
+                vec![11, 22],
+                vec![99, 111],
+                vec![999, 1010],
+                vec![1188511885],
+                vec![222222],
+                vec![],
+                vec![446446],
+                vec![38593859],
+                vec![565656],
+                vec![824824824],
+                vec![2121212121]
+            ]
+        );
     }
 }
