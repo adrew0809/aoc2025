@@ -29,28 +29,26 @@ fn parse_bank(line: &str) -> Option<Vec<u64>> {
         .collect()
 }
 
-// Find the largest joltage useing the provided nbumber of batteries in the bank
+// Find the largest joltage using the provided nbumber of batteries in the bank
 fn largest_joltage(batteries: u32, bank: &[u64]) -> Option<u64> {
-    let n = bank.len();
     (0..batteries)
         .rev()
-        .try_fold((0, 0, n - batteries as usize + 1), |acc, place| {
-            find_battery(acc, place, bank)
+        .try_fold((0, 0), |(joltage, begin), rank| {
+            find_max_battery(begin, rank, bank).map(|(a, i)| (joltage + a * 10u64.pow(rank), i + 1))
         })
-        .map(|(joltage, _, _)| joltage)
+        .map(|(joltage, _)| joltage)
 }
 
-fn find_battery(
-    (joltage, begin, end): (u64, usize, usize),
-    rank: u32,
-    bank: &[u64],
-) -> Option<(u64, usize, usize)> {
-    bank[begin..end]
+// Finds the value and index of the maximum battery whiel making sure there are at least
+// rank more batteries to the right
+fn find_max_battery(begin: usize, rank: u32, bank: &[u64]) -> Option<(u64, usize)> {
+    let n = bank.len();
+    bank[begin..n - rank as usize]
         .iter()
         .enumerate()
         .rev()
         .max_by(|(_, x), (_, y)| x.cmp(y))
-        .map(|(i, a)| (joltage + a * 10_u64.pow(rank), begin + i + 1, end + 1))
+        .map(|(i, a)| (*a, begin + i))
 }
 
 #[cfg(test)]
