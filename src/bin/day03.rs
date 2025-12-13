@@ -3,71 +3,46 @@
 
 fn main() {
     use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead, BufReader, Error, ErrorKind};
 
-    let joltage: u32 =
-        BufReader::new(File::open("data/day03/input.txt").expect("can read input file"))
+    let total_output: Result<u32, _> = File::open("data/day03/input.txt").and_then(|file| {
+        BufReader::new(file)
             .lines()
             .map(|line| {
-                largest_joltage(
-                    &line
-                        .expect("can read input file")
-                        .chars()
-                        .map(|c| c.to_digit(10).expect("input is all digits"))
-                        .collect::<Vec<_>>(),
-                )
-                .expect("input has no empty lines")
+                line.and_then(|l| {
+                    parse_bank(&l)
+                        .and_then(|b| largest_joltage(&b))
+                        .ok_or(Error::from(ErrorKind::InvalidInput))
+                })
             })
-            .sum();
-    println!("joltage: {}", joltage);
+            .sum()
+    });
+    println!("{:?}", total_output);
+}
+
+fn parse_bank(line: &str) -> Option<Vec<u32>> {
+    line.chars().map(|c| c.to_digit(10)).collect()
 }
 
 fn largest_joltage(bank: &[u32]) -> Option<u32> {
     let n = bank.len();
-    bank.iter()
-        .bounded_max_element(0, n - 1, strict_gt)
-        .and_then(|(i, a)| {
-            bank.iter()
-                .bounded_max_element(i + 1, n, strict_gt)
-                .map(|(_, b)| 10 * a + b)
-        })
-    //.and_then(|[a, b]| {
-    //    a.to_digit(10)
-    //        .and_then(|a| b.to_digit(10).map(|b| 10 * a + b))
-    //})
+    bank[0..n - 1]
+        .iter()
+        .enumerate()
+        .rev()
+        .max_by(|(_, x), (_, y)| x.cmp(y))
+        .and_then(|(i, a)| bank[i + 1..].iter().max().map(|b| 10 * a + b))
 }
-
-fn strict_gt<T: PartialOrd>(x: &T, y: &T) -> std::cmp::Ordering {
-    if x < y {
-        std::cmp::Ordering::Less
-    } else {
-        std::cmp::Ordering::Greater
-    }
-}
-
-trait BoundedMaxIter {
-    fn bounded_max_element<F>(
-        self,
-        start: usize,
-        end: usize,
-        compare: F,
-    ) -> Option<(usize, Self::Item)>
-    where
-        Self: Sized + Iterator,
-        F: Fn(&Self::Item, &Self::Item) -> std::cmp::Ordering,
-    {
-        self.enumerate()
-            .skip(start)
-            .take(end - start)
-            .max_by(|(_, x), (_, y)| compare(x, y))
-    }
-}
-
-impl<I> BoundedMaxIter for I where I: Iterator {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const CONTENT: &str = "987654321111111
+811111111111119
+234234234234278
+818181911112111
+";
 
     const BANKS: [[u32; 15]; 4] = [
         [9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1],
@@ -75,6 +50,12 @@ mod tests {
         [2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 7, 8],
         [8, 1, 8, 1, 8, 1, 9, 1, 1, 1, 1, 2, 1, 1, 1],
     ];
+
+    #[test]
+    fn test_parsing() {
+        let banks: Option<Vec<_>> = CONTENT.lines().map(|line| parse_bank(&line)).collect();
+        assert_eq!(banks.unwrap(), BANKS);
+    }
 
     #[test]
     fn test_sample() {
