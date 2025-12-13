@@ -29,7 +29,7 @@ fn parse_bank(line: &str) -> Option<Vec<u64>> {
         .collect()
 }
 
-// Find the largest joltage using the provided nbumber of batteries in the bank
+// Find the largest joltage using the provided number of batteries in the bank
 fn largest_joltage(batteries: u32, bank: &[u64]) -> Option<u64> {
     (0..batteries)
         .rev()
@@ -39,7 +39,7 @@ fn largest_joltage(batteries: u32, bank: &[u64]) -> Option<u64> {
         .map(|(joltage, _)| joltage)
 }
 
-// Finds the value and index of the maximum battery whiel making sure there are at least
+// Finds the value and index of the maximum battery while making sure there are at least
 // rank more batteries to the right
 fn find_max_battery(begin: usize, rank: u32, bank: &[u64]) -> Option<(u64, usize)> {
     let n = bank.len();
