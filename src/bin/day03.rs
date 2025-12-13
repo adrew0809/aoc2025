@@ -5,13 +5,15 @@ fn main() {
     use std::fs::File;
     use std::io::{BufRead, BufReader, Error, ErrorKind};
 
-    let total_output: Result<u32, _> = File::open("data/day03/input.txt").and_then(|file| {
+    let batteries = 12;
+
+    let total_output: Result<u64, _> = File::open("data/day03/input.txt").and_then(|file| {
         BufReader::new(file)
             .lines()
             .map(|line| {
                 line.and_then(|l| {
                     parse_bank(&l)
-                        .and_then(|b| largest_joltage(&b))
+                        .and_then(|b| largest_joltage(batteries, &b))
                         .ok_or(Error::from(ErrorKind::InvalidInput))
                 })
             })
@@ -20,31 +22,49 @@ fn main() {
     println!("{:?}", total_output);
 }
 
-fn parse_bank(line: &str) -> Option<Vec<u32>> {
-    line.chars().map(|c| c.to_digit(10)).collect()
+// Parse a string of digits into a vector of integers
+fn parse_bank(line: &str) -> Option<Vec<u64>> {
+    line.chars()
+        .map(|c| c.to_digit(10).map(u64::from))
+        .collect()
 }
 
-fn largest_joltage(bank: &[u32]) -> Option<u32> {
+// Find the largest joltage useing the provided nbumber of batteries in the bank
+fn largest_joltage(batteries: u32, bank: &[u64]) -> Option<u64> {
     let n = bank.len();
-    bank[0..n - 1]
+    (0..batteries)
+        .rev()
+        .try_fold((0, 0, n - batteries as usize + 1), |acc, place| {
+            find_battery(acc, place, bank)
+        })
+        .map(|(joltage, _, _)| joltage)
+}
+
+fn find_battery(
+    (joltage, begin, end): (u64, usize, usize),
+    rank: u32,
+    bank: &[u64],
+) -> Option<(u64, usize, usize)> {
+    bank[begin..end]
         .iter()
         .enumerate()
         .rev()
         .max_by(|(_, x), (_, y)| x.cmp(y))
-        .and_then(|(i, a)| bank[i + 1..].iter().max().map(|b| 10 * a + b))
+        .map(|(i, a)| (joltage + a * 10_u64.pow(rank), begin + i + 1, end + 1))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const CONTENT: &str = "987654321111111
+    const CONTENT: &str = "\
+987654321111111
 811111111111119
 234234234234278
 818181911112111
 ";
 
-    const BANKS: [[u32; 15]; 4] = [
+    const BANKS: [[u64; 15]; 4] = [
         [9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1, 1, 1],
         [8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9],
         [2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 7, 8],
@@ -58,8 +78,22 @@ mod tests {
     }
 
     #[test]
-    fn test_sample() {
-        let js: Vec<_> = BANKS.iter().map(|bank| largest_joltage(bank)).collect();
-        assert_eq!(js, [Some(98), Some(89), Some(78), Some(92)]);
+    fn test_sample_with_2() {
+        let joltages: Vec<_> = BANKS.iter().map(|bank| largest_joltage(2, bank)).collect();
+        assert_eq!(joltages, [Some(98), Some(89), Some(78), Some(92)]);
+    }
+
+    #[test]
+    fn test_sample_with_12() {
+        let joltages: Vec<_> = BANKS.iter().map(|bank| largest_joltage(12, bank)).collect();
+        assert_eq!(
+            joltages,
+            [
+                Some(987654321111),
+                Some(811111111119),
+                Some(434234234278),
+                Some(888911112111)
+            ]
+        );
     }
 }
