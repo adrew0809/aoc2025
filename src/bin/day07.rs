@@ -5,7 +5,8 @@ fn main() {
     let text = std::fs::read_to_string("data/day07/input.txt").unwrap();
     let (initial_beam, splitters) = parse_input(&text).unwrap();
     let ans0 = count_splits(&initial_beam, &splitters);
-    println!("{}", ans0);
+    let ans1 = count_timelines(&initial_beam, &splitters);
+    println!("{}\n{}", ans0, ans1);
 }
 
 fn parse_input(text: &str) -> Option<(isize, Vec<Vec<isize>>)> {
@@ -38,39 +39,63 @@ fn parse_splitters(lines: &[&str]) -> Vec<Vec<isize>> {
         .collect()
 }
 
+fn count_timelines<T>(initial_beam: &isize, splitters: &[T]) -> usize
+where
+    T: AsRef<[isize]>,
+{
+    let beams = splitters
+        .iter()
+        .fold(vec![(*initial_beam, 1)], |beams, splitters| {
+            let (_, beams) = split_beams(&beams, splitters.as_ref());
+            beams
+        });
+    beams.iter().map(|(_, cnt)| cnt).sum()
+}
+
 fn count_splits<T>(initial_beam: &isize, splitters: &[T]) -> usize
 where
     T: AsRef<[isize]>,
 {
-    let (sum, _) = splitters
-        .iter()
-        .fold((0, vec![*initial_beam]), |(sum, beams), splitters| {
-            let (n, beams) = split_beams(&beams, splitters.as_ref());
-            (sum + n, beams)
-        });
+    let (sum, _) =
+        splitters
+            .iter()
+            .fold((0, vec![(*initial_beam, 1)]), |(sum, beams), splitters| {
+                let (n, beams) = split_beams(&beams, splitters.as_ref());
+                (sum + n, beams)
+            });
     sum
 }
 
-fn split_beams(beams: &[isize], splitters: &[isize]) -> (usize, Vec<isize>) {
-    let mut num_splits = 0;
+fn split_beams(beams: &[(isize, usize)], splitters: &[isize]) -> (usize, Vec<(isize, usize)>) {
+    let mut splits = Vec::new();
     let mut beams: Vec<_> = beams
         .iter()
-        .flat_map(|b| {
-            if splitters.binary_search(b).is_ok() {
-                num_splits += 1;
+        .flat_map(|b @ (pos, _)| {
+            if splitters.binary_search(pos).is_ok() {
+                splits.push(pos);
                 split_beam(b).to_vec()
             } else {
                 vec![*b]
             }
         })
         .collect();
+    splits.sort();
+    splits.dedup();
     beams.sort();
-    beams.dedup();
-    (num_splits, beams)
+    beams = beams
+        .chunk_by(|a, b| a == b)
+        .map(|c| {
+            (
+                c.first().expect("chunk has at least one element").0,
+                c.iter().map(|(_, n)| n).sum(),
+            )
+        })
+        .collect();
+    (splits.len(), beams)
 }
 
-fn split_beam(beam: &isize) -> [isize; 2] {
-    [beam - 1, beam + 1]
+fn split_beam((pos, cnt): &(isize, usize)) -> [(isize, usize); 2] {
+    [(pos - 1, *cnt), (pos + 1, *cnt)]
 }
 
 #[cfg(test)]
@@ -119,6 +144,11 @@ mod tests {
     #[test]
     fn test_count_splits() {
         assert_eq!(count_splits(&INITIAL_BEAM, &SPLITTERS), 21);
+    }
+
+    #[test]
+    fn test_count_timelines() {
+        assert_eq!(count_timelines(&INITIAL_BEAM, &SPLITTERS), 40);
     }
 
     #[test]
