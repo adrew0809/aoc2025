@@ -1,71 +1,117 @@
 // Advent of Code 2025 Day 8
 // A. Drew
 
-use std::collections::{BTreeSet, VecDeque};
+use std::cmp::{Ordering, Reverse};
+use std::collections::{BTreeSet, BinaryHeap};
 use std::iter::zip;
 
-type Position = [i64; 3];
+type Node = [i64; 3];
 type Weight = i64;
-type Edge = (Weight, [Position; 2]);
+
+#[derive(Clone, Copy)]
+struct Edge(Weight, [Node; 2]);
+
+impl Ord for Edge {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for Edge {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Edge {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for Edge {}
 
 fn main() {
     let text = std::fs::read_to_string("data/day08/input.txt").unwrap();
-    let boxes: Vec<_> = text
-        .lines()
-        .map(|line| {
-            let nums: Vec<_> = line.split(',').map(|d| d.parse::<i64>().unwrap()).collect();
-            assert_eq!(nums.len(), 3);
-            [nums[0], nums[1], nums[2]]
-        })
-        .collect();
-    let edges = get_shortest(1000, &boxes);
-    let circuits = connect(&edges);
-    let mut sizes: Vec<_> = circuits.iter().map(|x| x.len()).collect();
-    sizes.sort_by_key(|a| std::cmp::Reverse(*a));
-    let ans0: usize = sizes.iter().take(3).product();
+    let boxes = parse_boxes(&text).unwrap();
+    let mut edges = get_edges(&boxes);
+    let mut circuits = connect_n(&mut edges.clone(), 1000);
+    circuits.sort_by_key(|b| std::cmp::Reverse(b.len()));
+    let ans0: usize = circuits.iter().take(3).map(|a| a.len()).product();
     println!("answer 0: {}", ans0);
+    let whole_circuit = connect_all(&mut edges, boxes.len());
+    let [[x0, _, _], [x1, _, _]] = whole_circuit.last().unwrap();
+    let ans1 = x0 * x1;
+    println!("answer 1: {}", ans1);
 }
 
-fn get_shortest(n: usize, boxes: &[Position]) -> Vec<Edge> {
+// Connect the n shortest nodes
+fn connect_n(edges: &mut BinaryHeap<Reverse<Edge>>, n: usize) -> Vec<BTreeSet<Node>> {
+    let mut circuits: Vec<BTreeSet<Node>> = Vec::new();
+    for _ in 0..n {
+        if let Some(Reverse(Edge(_, nodes))) = edges.pop() {
+            circuits = add_edge(&circuits, &nodes);
+        }
+    }
+    circuits
+}
+
+fn add_edge(circuits: &[BTreeSet<Node>], [a, b]: &[Node; 2]) -> Vec<BTreeSet<Node>> {
+    let (mut with, mut without): (Vec<_>, Vec<_>) = circuits
+        .iter()
+        .cloned()
+        .partition(|x| x.contains(a) || x.contains(b));
+    with.push(BTreeSet::from([*a, *b]));
+    let merged = with
+        .iter()
+        .fold(BTreeSet::new(), |acc, x| acc.union(x).cloned().collect());
+    without.push(merged);
+    without
+}
+
+// Get a min-heap of edges from a slice of nodes
+fn get_edges(boxes: &[Node]) -> BinaryHeap<Reverse<Edge>> {
     boxes
         .iter()
         .enumerate()
-        .fold(VecDeque::<Edge>::with_capacity(n), |mut edges, (i, a)| {
-            boxes.iter().skip(i + 1).for_each(|b| {
+        .fold(BinaryHeap::new(), |edges, (i, a)| {
+            boxes.iter().skip(i + 1).fold(edges, |mut edges, b| {
                 let weight: i64 = zip(a, b).map(|(a, b)| (a - b).pow(2)).sum();
                 let mut vertices = [*a, *b];
                 vertices.sort();
-                let j = edges.partition_point(|(w, _)| *w <= weight);
-                edges.insert(j, (weight, vertices));
-                edges.truncate(n);
-            });
-            edges
+                edges.push(Reverse(Edge(weight, vertices)));
+                edges
+            })
         })
-        .into()
 }
 
-fn connect(edges: &[Edge]) -> Vec<BTreeSet<Position>> {
-    edges
-        .iter()
-        .fold(Vec::<BTreeSet<Position>>::new(), |sets, (_, [a, b])| {
-            let (mut with, mut without): (Vec<_>, Vec<_>) = sets
-                .iter()
-                .cloned()
-                .partition(|x| x.contains(a) || x.contains(b));
-            with.push(BTreeSet::from([*a, *b]));
-            let merged = with
-                .iter()
-                .fold(BTreeSet::new(), |acc, x| acc.union(x).cloned().collect());
-            without.push(merged);
-            without
+// Connect the nodes until there is one circuit of size n
+fn connect_all(edges: &mut BinaryHeap<Reverse<Edge>>, n: usize) -> Vec<[Node; 2]> {
+    let mut connected_edges: Vec<[Node; 2]> = Vec::new();
+    let mut circuits: Vec<BTreeSet<Node>> = Vec::new();
+    while !(circuits.len() == 1 && circuits.first().unwrap().len() == n) {
+        if let Some(Reverse(Edge(_, nodes))) = edges.pop() {
+            connected_edges.push(nodes);
+            circuits = add_edge(&circuits, &nodes);
+        }
+    }
+    connected_edges
+}
+
+fn parse_boxes(text: &str) -> Option<Vec<Node>> {
+    text.lines()
+        .map(|line| {
+            let nums: Option<Vec<_>> = line.split(',').map(|d| d.parse::<i64>().ok()).collect();
+            nums.filter(|x| x.len() == 3).map(|x| [x[0], x[1], x[2]])
         })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const BOXES: [Position; 20] = [
+    const BOXES: [Node; 20] = [
         [162, 817, 812],
         [57, 618, 57],
         [906, 360, 560],
@@ -89,26 +135,26 @@ mod tests {
     ];
 
     #[test]
-    fn test_get_shortest() {
-        let edges = get_shortest(10, &BOXES);
-        let edges: Vec<_> = edges.iter().map(|(_, pos)| *pos).collect();
-        assert_eq!(
-            edges[..4],
-            [
-                [[162, 817, 812], [425, 690, 689]],
-                [[162, 817, 812], [431, 825, 988]],
-                [[805, 96, 715], [906, 360, 560]],
-                [[425, 690, 689], [431, 825, 988]]
-            ]
-        );
-    }
-
-    #[test]
-    fn test_connect() {
-        let edges = get_shortest(10, &BOXES);
-        let circuits = connect(&edges);
+    fn test_connect_n() {
+        let mut edges = get_edges(&BOXES);
+        assert_eq!(edges.len(), (20 * 19) / 2);
+        let circuits = connect_n(&mut edges, 10);
         let mut sizes: Vec<_> = circuits.iter().map(|x| x.len()).collect();
         sizes.sort_by_key(|a| std::cmp::Reverse(*a));
         assert_eq!(sizes, [5, 4, 2, 2]);
+    }
+
+    #[test]
+    fn test_get_edges() {
+        let edges = get_edges(&BOXES);
+        let Reverse(Edge(_, nodes)) = edges.peek().unwrap();
+        assert_eq!(nodes, &[[162, 817, 812], [425, 690, 689]]);
+    }
+
+    #[test]
+    fn test_connect_all() {
+        let mut edges = get_edges(&BOXES);
+        let circuit = connect_all(&mut edges, BOXES.len());
+        assert_eq!(circuit.last().unwrap(), &[[117, 168, 530], [216, 146, 977]]);
     }
 }
